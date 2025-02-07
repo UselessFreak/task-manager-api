@@ -1,4 +1,4 @@
-import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, CreateDateColumn, UpdateDateColumn } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, ManyToMany, JoinTable, CreateDateColumn, UpdateDateColumn } from 'typeorm';
 import { ApiProperty, ApiTags } from '@nestjs/swagger';
 import { User } from '../users/user.entity';
 import { Project } from '../projects/project.entity';
@@ -45,12 +45,25 @@ export class Task {
   status: TaskStatus;
 
   @ApiProperty({ 
-    type: () => User, 
-    description: 'Task assignee details',
-    title: 'Assignee'
+    example: false, 
+    description: 'Task archive status',
+    title: 'Is Archived'
   })
-  @ManyToOne(() => User, user => user.tasks)
-  assignee: User;
+  @Column({ default: false })
+  isArchived: boolean;
+
+  @ApiProperty({ 
+    type: () => [User], 
+    description: 'Task assignees details',
+    title: 'Assignees'
+  })
+  @ManyToMany(() => User, user => user.tasks)
+  @JoinTable({
+    name: 'task_assignees',
+    joinColumn: { name: 'task_id', referencedColumnName: 'id' },
+    inverseJoinColumn: { name: 'user_id', referencedColumnName: 'id' }
+  })
+  assignees: User[];
 
   @ApiProperty({ 
     type: () => Project, 

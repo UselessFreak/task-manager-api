@@ -3,11 +3,14 @@ import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagg
 import { TasksService } from './tasks.service';
 import { CreateTaskDto } from './dto/create-task.dto';
 import { UpdateTaskDto } from './dto/update-task.dto';
+import { AssignUsersDto } from './dto/assign-users.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { Task } from './task.entity';
 import { TaskStatus } from './task-status.enum';
 import { Roles, UserRole } from '../auth/roles.decorator';
 import { RolesGuard } from '../auth/roles.guard';
+import { GetUser } from '../auth/get-user.decorator';
+import { User } from '../users/user.entity';
 
 @ApiTags('Tasks')
 @ApiBearerAuth()
@@ -22,8 +25,19 @@ export class TasksController {
   @ApiOperation({ summary: 'Create new task' })
   @ApiResponse({ status: 201, description: 'Task successfully created', type: Task })
   @ApiResponse({ status: 403, description: 'Forbidden - Admin only' })
-  async createTask(@Body() createTaskDto: CreateTaskDto): Promise<Task> {
-    return this.tasksService.createTask(createTaskDto);
+  async createTask(
+    @Body() createTaskDto: CreateTaskDto,
+    @GetUser() user: User
+  ): Promise<Task> {
+    return this.tasksService.createTask(createTaskDto, user);
+  }
+
+  @Get()
+  @Roles(UserRole.ADMIN, UserRole.EMPLOYEE)
+  @ApiOperation({ summary: 'Get all active tasks' })
+  @ApiResponse({ status: 200, description: 'Returns all active tasks', type: [Task] })
+  async getTasks(): Promise<Task[]> {
+    return this.tasksService.getTasks();
   }
 
   @Get(':id')
@@ -47,26 +61,37 @@ export class TasksController {
     return this.tasksService.updateTask(id, updateTaskDto);
   }
 
-  @Delete('/:id')
+  @Patch('/:id/archive')
   @Roles(UserRole.ADMIN)
-  @ApiOperation({ summary: 'Delete task' })
-  @ApiResponse({ status: 204, description: 'Task successfully deleted' })
+  @ApiOperation({ summary: 'Archive task' })
+  @ApiResponse({ status: 200, description: 'Task successfully archived', type: Task })
   @ApiResponse({ status: 403, description: 'Forbidden - Admin only' })
-  @HttpCode(204)
-  async deleteTask(@Param('id') id: string): Promise<void> {
-    return this.tasksService.deleteTask(id);
+  async archiveTask(@Param('id') id: string): Promise<Task> {
+    return this.tasksService.archiveTask(id);
   }
 
-  @Patch(':taskId/assignee/:userId')
+  @Patch(':taskId/assignees')
   @Roles(UserRole.ADMIN)
-  @ApiOperation({ summary: 'Assign task to user' })
-  @ApiResponse({ status: 200, description: 'Task successfully assigned', type: Task })
+  @ApiOperation({ summary: 'Assign multiple users to task' })
+  @ApiResponse({ status: 200, description: 'Users successfully assigned to task', type: Task })
   @ApiResponse({ status: 403, description: 'Forbidden - Admin only' })
-  async assignTask(
+  async assignUsers(
     @Param('taskId') taskId: string,
-    @Param('userId') userId: string,
+    @Body() assignUsersDto: AssignUsersDto
   ): Promise<Task> {
-    return this.tasksService.assignTask(taskId, userId);
+    return this.tasksService.assignUsers(taskId, assignUsersDto.userIds);
+  }
+
+  @Delete(':taskId/assignees/:userId')
+  @Roles(UserRole.ADMIN)
+  @ApiOperation({ summary: 'Remove assignee from task' })
+  @ApiResponse({ status: 200, description: 'Assignee removed from task', type: Task })
+  @ApiResponse({ status: 403, description: 'Forbidden - Admin only' })
+  async removeAssignee(
+    @Param('taskId') taskId: string,
+    @Param('userId') userId: string
+  ): Promise<Task> {
+    return this.tasksService.removeAssignee(taskId, userId);
   }
 
   @Patch(':taskId/status/:status')

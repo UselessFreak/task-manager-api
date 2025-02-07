@@ -1,4 +1,4 @@
-import { IsNotEmpty, IsString, IsUUID } from 'class-validator';
+import { IsNotEmpty, IsString, IsUUID, IsArray } from 'class-validator';
 import { ApiProperty, ApiTags } from '@nestjs/swagger';
 
 @ApiTags('Task DTOs')
@@ -36,12 +36,14 @@ export class CreateTaskDto {
     projectId: string;
 
     @ApiProperty({ 
-        example: '8894fd71-207a-4fb7-9bd9-9f5decd66857', 
-        description: 'Assignee user ID',
-        title: 'Assignee Identifier',
-        format: 'uuid'
+        example: ['8894fd71-207a-4fb7-9bd9-9f5decd66857'], 
+        description: 'Array of assignee user IDs',
+        title: 'Assignee Identifiers',
+        type: [String],
+        format: 'uuid',
+        isArray: true
     })
-    @IsNotEmpty()
-    @IsUUID()
-    assigneeId: string;
+    @IsArray()
+    @IsUUID('4', { each: true })
+    assigneeIds: string[];
 }

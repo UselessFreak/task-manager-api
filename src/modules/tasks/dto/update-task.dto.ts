@@ -1,4 +1,4 @@
-import { IsOptional, IsString, IsEnum, IsUUID } from 'class-validator';
+import { IsOptional, IsString, IsEnum, IsUUID, IsArray } from 'class-validator';
 import { ApiProperty, ApiTags } from '@nestjs/swagger';
 import { TaskStatus } from '../task-status.enum';
 
@@ -40,13 +40,16 @@ export class UpdateTaskDto {
     status?: TaskStatus;
 
     @ApiProperty({ 
-        example: '8894fd71-207a-4fb7-9bd9-9f5decd66857', 
-        description: 'New assignee user ID',
-        title: 'Assignee Identifier',
+        example: ['8894fd71-207a-4fb7-9bd9-9f5decd66857'], 
+        description: 'Array of new assignee user IDs',
+        title: 'Assignee Identifiers',
         required: false,
-        format: 'uuid'
+        type: [String],
+        format: 'uuid',
+        isArray: true
     })
     @IsOptional()
-    @IsUUID()
-    assigneeId?: string;
+    @IsArray()
+    @IsUUID('4', { each: true })
+    assigneeIds?: string[];
 }

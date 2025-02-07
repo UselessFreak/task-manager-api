@@ -10,7 +10,7 @@
 1. Ensure Docker Desktop is running (green whale icon in tray)
 
 2. Clone repository
-   $ git clone <repository-url>
+   $ git clone https://github.com/UselessFreak/task-manager-api.git
 
 
 3. Open project in VS Code
@@ -58,7 +58,7 @@
 1. Убедитесь, что Docker Desktop запущен (зеленая иконка кита в трее)
 
 2. Клонируйте репозиторий
-   $ bash git clone <репозиторий-url> 
+   $ git clone https://github.com/UselessFreak/task-manager-api.git 
 
 3. Откройте проект в VS Code
 

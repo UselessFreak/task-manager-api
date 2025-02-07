@@ -84,6 +84,6 @@ export class User {
     description: 'Tasks assigned to user',
     title: 'Tasks'
   })
-  @OneToMany(() => Task, task => task.assignee)
+  @OneToMany(() => Task, task => task.assignees)
   tasks: Task[];
 }

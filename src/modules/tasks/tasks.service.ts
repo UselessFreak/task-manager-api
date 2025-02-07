@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, In } from 'typeorm';
 import { Task } from './task.entity';
 import { CreateTaskDto } from './dto/create-task.dto';
 import { UpdateTaskDto } from './dto/update-task.dto';
@@ -19,55 +19,55 @@ export class TasksService {
     private userRepository: Repository<User>,
   ) {}
 
-  async createTask(createTaskDto: CreateTaskDto): Promise<Task> {
+  async createTask(createTaskDto: CreateTaskDto, creator: User): Promise<Task> {
     try {
-        console.log('2. Service receives:', createTaskDto);
-        
-        const { projectId, assigneeId, ...taskData } = createTaskDto;
-        console.log('3. After destructuring:', { taskData, projectId, assigneeId });
+      const { projectId, assigneeIds, ...taskData } = createTaskDto;
 
-        const project = await this.projectRepository.findOne({ where: { id: projectId } });
-        console.log('Found project:', project);
+      const project = await this.projectRepository.findOne({ where: { id: projectId } });
+      if (!project) {
+        throw new NotFoundException(`Project with ID "${projectId}" not found`);
+      }
 
-        if (!project) {
-            throw new NotFoundException(`Project with ID "${projectId}" not found`);
-        }
+      // Добавляем создателя в список исполнителей, если его там нет
+      const uniqueAssigneeIds = Array.from(new Set([...assigneeIds, creator.id]));
+      
+      const assignees = await this.userRepository.find({ 
+        where: { id: In(uniqueAssigneeIds) }
+      });
+      if (assignees.length !== uniqueAssigneeIds.length) {
+        throw new NotFoundException('One or more assignees not found');
+      }
 
-        const assignee = await this.userRepository.findOne({ where: { id: assigneeId } });
-        console.log('Found assignee:', assignee);
+      if (!taskData.title || !taskData.description) {
+        throw new Error(`Missing required fields: ${!taskData.title ? 'title' : ''} ${!taskData.description ? 'description' : ''}`);
+      }
 
-        if (!assignee) {
-            throw new NotFoundException(`User with ID "${assigneeId}" not found`);
-        }
-        
-        console.log('TaskData before create:', taskData);
-        if (!taskData.title || !taskData.description) {
-            throw new Error(`Missing required fields: ${!taskData.title ? 'title' : ''} ${!taskData.description ? 'description' : ''}`);
-        }
+      const newTask = this.taskRepository.create({
+        title: taskData.title,
+        description: taskData.description,
+        project,
+        assignees,
+        isArchived: false
+      });
 
-        const newTask = this.taskRepository.create({
-            title: taskData.title,
-            description: taskData.description,
-            project,
-            assignee,
-        });
-        console.log('4. Before save:', newTask);
-
-        const savedTask = await this.taskRepository.save(newTask);
-        console.log('5. After save:', savedTask);
-
-        return savedTask;
+      return await this.taskRepository.save(newTask);
     } catch (error) {
-        console.error('Error in createTask:', error);
-        throw error;
+      console.error('Error in createTask:', error);
+      throw error;
     }
   }
 
+  async getTasks(): Promise<Task[]> {
+    return this.taskRepository.find({
+      where: { isArchived: false },
+      relations: ['assignees', 'project'],
+    });
+  }
 
   async getTaskById(id: string): Promise<Task> {
     const task = await this.taskRepository.findOne({
       where: { id },
-      relations: ['assignee', 'project'],
+      relations: ['assignees', 'project'],
     });
 
     if (!task) {
@@ -78,9 +78,7 @@ export class TasksService {
   }
 
   async updateTask(id: string, updateTaskDto: UpdateTaskDto): Promise<Task> {
-    console.log('Updating task with data:', updateTaskDto);
     const task = await this.getTaskById(id);
-    console.log('Found task:', task);
     
     if (updateTaskDto.title) {
         task.title = updateTaskDto.title;
@@ -94,69 +92,76 @@ export class TasksService {
         task.status = updateTaskDto.status;
     }
     
-    if (updateTaskDto.assigneeId) {
-        const assignee = await this.userRepository.findOne({ 
-            where: { id: updateTaskDto.assigneeId } 
+    if (updateTaskDto.assigneeIds) {
+        const assignees = await this.userRepository.find({ 
+            where: { id: In(updateTaskDto.assigneeIds) }
         });
-        if (!assignee) {
-            throw new NotFoundException(`User with ID "${updateTaskDto.assigneeId}" not found`);
+        if (assignees.length !== updateTaskDto.assigneeIds.length) {
+            throw new NotFoundException('One or more assignees not found');
         }
-        task.assignee = assignee;
+        task.assignees = assignees;
     }
 
-    const savedTask = await this.taskRepository.save(task);
-    console.log('Saved task:', savedTask);
-    return savedTask;
+    return await this.taskRepository.save(task);
   }
 
-  async deleteTask(id: string): Promise<void> {
-    const result = await this.taskRepository.delete(id);
-    if (result.affected === 0) {
-      throw new NotFoundException(`Task with ID "${id}" not found`);
-    }
+  async archiveTask(id: string): Promise<Task> {
+    const task = await this.getTaskById(id);
+    task.isArchived = true;
+    return await this.taskRepository.save(task);
   }
 
-  async assignTask(taskId: string, userId: string): Promise<Task> {
+  async assignUsers(taskId: string, userIds: string[]): Promise<Task> {
     const task = await this.taskRepository.findOne({
         where: { id: taskId },
-        relations: ['assignee', 'project']
+        relations: ['assignees']
     });
 
     if (!task) {
         throw new NotFoundException(`Task with ID "${taskId}" not found`);
     }
 
-    const user = await this.userRepository.findOne({
-        where: { id: userId }
-    });
-
-    if (!user) {
-        throw new NotFoundException(`User with ID "${userId}" not found`);
+    const users = await this.userRepository.findByIds(userIds);
+    if (users.length !== userIds.length) {
+        throw new NotFoundException('One or more users not found');
     }
 
-    task.assignee = user;
+    task.assignees = users;
+    return this.taskRepository.save(task);
+  }
+
+  async removeAssignee(taskId: string, userId: string): Promise<Task> {
+    const task = await this.taskRepository.findOne({
+        where: { id: taskId },
+        relations: ['assignees']
+    });
+
+    if (!task) {
+        throw new NotFoundException(`Task with ID "${taskId}" not found`);
+    }
+
+    task.assignees = task.assignees.filter(user => user.id !== userId);
     return this.taskRepository.save(task);
   }
 
   async updateTaskStatus(taskId: string, status: TaskStatus): Promise<Task> {
     const task = await this.getTaskById(taskId);
-    
     task.status = status;
     return this.taskRepository.save(task);
- }
-
- async moveTaskToProject(taskId: string, projectId: string): Promise<Task> {
-  const task = await this.getTaskById(taskId);
-  
-  const newProject = await this.projectRepository.findOne({
-      where: { id: projectId }
-  });
-
-  if (!newProject) {
-      throw new NotFoundException(`Project with ID "${projectId}" not found`);
   }
 
-  task.project = newProject;
-  return this.taskRepository.save(task);
+  async moveTaskToProject(taskId: string, projectId: string): Promise<Task> {
+    const task = await this.getTaskById(taskId);
+    
+    const newProject = await this.projectRepository.findOne({
+        where: { id: projectId }
+    });
+
+    if (!newProject) {
+        throw new NotFoundException(`Project with ID "${projectId}" not found`);
+    }
+
+    task.project = newProject;
+    return this.taskRepository.save(task);
   }
 }
